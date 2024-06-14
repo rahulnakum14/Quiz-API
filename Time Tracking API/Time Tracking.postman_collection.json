@@ -1,0 +1,166 @@
+{
+	"info": {
+		"_postman_id": "e2c9d52f-5467-488d-a366-aa24e7df0dde",
+		"name": "Time Tracking",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "33006508"
+	},
+	"item": [
+		{
+			"name": "Add Entry",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:5000/add_entry/3",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "5000",
+					"path": [
+						"add_entry",
+						"3"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update Entry",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"date\": \"2024-03-13\",\r\n    \"timeIn\": \"15:41:01\",\r\n    \"newTimeOut\":\"15:41:45\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://127.0.0.1:5000/update_entry/2",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "5000",
+					"path": [
+						"update_entry",
+						"2"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Current Week",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://127.0.0.1:5000/api/path?empId=1&data=currentWeek",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "5000",
+					"path": [
+						"api",
+						"path"
+					],
+					"query": [
+						{
+							"key": "empId",
+							"value": "1"
+						},
+						{
+							"key": "data",
+							"value": "currentWeek"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Previous Week",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://127.0.0.1:5000/api/path?empId=1&data=previousWeek",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "5000",
+					"path": [
+						"api",
+						"path"
+					],
+					"query": [
+						{
+							"key": "empId",
+							"value": "1"
+						},
+						{
+							"key": "data",
+							"value": "previousWeek"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Exit Entry",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://127.0.0.1:5000/exit_entry/1",
+					"protocol": "http",
+					"host": [
+						"127",
+						"0",
+						"0",
+						"1"
+					],
+					"port": "5000",
+					"path": [
+						"exit_entry",
+						"1"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
