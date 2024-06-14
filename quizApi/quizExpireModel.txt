@@ -1,0 +1,82 @@
+import { Model, DataTypes } from "sequelize";
+import { sequelize } from "../db";
+import quizAttributes from "../../types/quizType";
+
+/**
+ * Blog model class representing a QuizExpire in the database.
+ */
+class QuizExpiration extends Model<quizAttributes> {
+  public id!: number;
+  public quizId!: string;
+  public quizExpireTime!: string;
+}
+
+/**
+ * Initialize the QuizExpire model with attributes and options.
+ */
+QuizExpiration.init(
+  {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true,
+    },
+    quizId: {
+      type: DataTypes.INTEGER,
+      references: {
+        model: "quizs",
+        key: "id",
+      },
+    },
+    quizExpirationTime: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+  },
+  {
+    tableName: "quizExpirations",
+    sequelize,
+    modelName: "quizExpiration",
+    timestamps: false,
+  }
+);
+
+export default QuizExpiration;
+
+
+
+
+============================================================
+
+
+
+'use strict';
+
+/** @type {import('sequelize-cli').Migration} */
+module.exports = {
+  async up (queryInterface, Sequelize) {
+    await queryInterface.createTable('quizExpirations', {
+      id: {
+        type: Sequelize.INTEGER,
+        primaryKey: true,
+        autoIncrement: true,
+      },
+      quizId:{
+        type: Sequelize.INTEGER,
+        references: {
+          model:"quizs",
+          key:"id"
+        }
+      },
+      quizExpirationTime: {
+        type: Sequelize.STRING,
+        allowNull: false,
+      },
+    });
+  },
+
+  async down (queryInterface, Sequelize) {
+    await queryInterface.dropTable('quizExpirations');
+
+  }
+};

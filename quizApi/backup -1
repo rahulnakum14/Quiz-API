@@ -1,0 +1,550 @@
+import { Server } from "socket.io";
+import { CronJob } from "cron";
+import Question from "../db/models/quesTionModel";
+import QuizExpiration from "../db/models/quizExpireModel";
+import { sequelize } from "../db/db";
+
+export class QuizController {
+  io: Server;
+  score: number = 0;
+  cronJob: CronJob;
+  currentMinutesResult: number;
+  finalResult: number;
+  tmp: number;
+  isQuizOver: Boolean;
+  isQuestionChecked: number;
+
+  /**
+   * Creates a new QuizController instance.
+   * @param {Server} io - The Socket.IO server instance.
+   */
+  constructor(io: Server) {
+    this.io = io;
+    this.tmp = 0;
+  }
+
+  /**
+   * Asynchronously retrieves questions from the database and emits them to all connected clients.
+   *
+   * @async
+   * @returns {Promise<void>} Resolves after emitting questions or rejecting on error.
+   * @throws {Error} If no questions are found in the database.
+   * @memberof QuizController
+   */
+  async sendQuestions(): Promise<void> {
+    try {
+      const questions = await Question.findAll({
+        order: sequelize.literal("rand()"),
+        limit: 1,
+        attributes: ["id", "question"],
+      });
+
+      if (!questions) {
+        this.io.emit("questions_controller", "Question not found.");
+        return;
+      }
+
+      this.io.emit("questions_controller", questions);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Check the Answer of the questions.
+   *
+   * @async
+   * @param {number} id - Id of the questions.
+   * @param {string} answer - Answer Of the Question supplied by the user.
+   * @returns {Promise<void>} Resolves after emitting questions or rejecting on error.
+   * @throws {Error} If no questions are found in the database.
+   * @memberof QuizController
+   */
+  async checkAnswers(
+    id: number,
+    answer: string,
+    quizId: number
+  ): Promise<void> {
+    try {
+      //Check if quiz is expires or not.
+      const isQuizExpired = await this.quizExpirationTime(quizId);
+
+      if (isQuizExpired) {
+        this.io.emit("quiz_time_over", "Quiz Time is Over.");
+        
+        if (this.cronJob.running) {
+          this.cronJob.stop();
+          console.log('Quiz Time IS over.');
+          
+          return;
+        }
+      }
+
+      const result = await Question.findOne({ where: { id } });
+
+      if (!result) {
+        this.io.emit("questions_controller", "Question not found.");
+        return;
+      }
+
+      if (!this.cronJob || !this.cronJob.running) {
+        this.io.emit("question_time_over", "Time is Over For this Question.");
+        return;
+      }
+
+      const quizExpireTimeAsNumber = parseInt(result.expirationTime);
+
+
+      if (!this.tmp) {
+        this.tmp = quizExpireTimeAsNumber + this.currentMinutesResult;
+      }
+
+      const currentMinutes = new Date().getMinutes();
+      this.currentMinutesResult = currentMinutes;
+
+      if (this.tmp > 60) {
+        this.tmp = this.tmp % 60;
+      }
+      console.log('- this is the expire time for the current questions',quizExpireTimeAsNumber);
+      console.log('- This is the Total time',this.tmp);
+      console.log('- This is the Remaining time',this.currentMinutesResult);
+
+      if (this.tmp === this.currentMinutesResult) {
+        this.io.emit( 
+          "questions_controller",
+          "Submission Time For this question is over."
+        );
+        if (this.cronJob.running) {
+          this.isQuestionChecked = result.id;
+          this.cronJob.stop();
+          this.tmp = 0;
+          console.log('3. NOw cron Job is Stopped For the Current Question.');
+          return;
+        }
+      }
+
+      if (result.ans === answer) {
+        this.score += 1;
+        this.cronJob.stop();
+        this.io.emit("questions_controller", "Your answer is correct!");
+      } else {
+        this.io.emit("questions_controller", "Your answer is wrong.");
+      }
+    } catch (error) {
+      console.error(" Something went wrong while checking answers:", error);
+      throw error;
+    }
+  }
+
+  /**
+   *Check the Answer of the question based on question Id.
+   *
+   * @param {number} id - Id of the questions.
+   * @param {string} answer - Answer Of the Question supplied by the user.
+   * @returns {Promise<void>} Resolves after emitting the send questions by ID or rejecting on error.
+   * @memberof QuizController
+   */
+  async sendAnsById(data: { id: number; answer: string }): Promise<void> {
+    try {
+      const { id, answer } = data;
+
+      const result = await Question.findOne({ where: { id } });
+
+      if (!result) {
+        this.io.emit("questions_controller", "Question not found.");
+        return;
+      }
+
+      const quizId = result.quizId;
+      const expirationTime = result.expirationTime;
+
+      if (!this.cronJob || !this.cronJob.running) {
+        // Check if user again tries to submit same question which time is expire.
+        if(result.id === this.isQuestionChecked){
+          this.io.emit( 
+            "questions_controller",
+            "Submission Time For this question is over."
+          );
+          return
+        }
+
+        console.log('1. Cron Job is not running - From Send ANS ID');
+        await this.startCronJob(id, answer, quizId, expirationTime);
+      } else {
+        console.log('Cron Job is running - From Send ANS ID and now checking the answer.');
+        await this.checkAnswers(id, answer, quizId);
+      }
+    } catch (error) {
+      console.error("Error while sending questions:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Calcuting the Quiz Expirations Time.
+   *
+   * @param {number} id
+   * @returns {Promise<void>} Resolves after emitting quizExpirationTime or rejecting on error.
+   * @memberof QuizController
+   */
+  async quizExpirationTime(id: number): Promise<Boolean> {
+    try {
+      //Check if quiz is expires or not.
+      const result = await QuizExpiration.findOne({
+        where: {
+          quizId: id,
+        },
+      });
+      console.log("this is quizExpirationTime of quiz", result.quizExpirationTime);
+
+      const currentMinutes = new Date().getMinutes();
+      this.currentMinutesResult = currentMinutes;
+
+      if (!this.finalResult) {
+        this.finalResult =
+          parseInt(result.quizExpirationTime) + this.currentMinutesResult;
+
+        if (this.finalResult > 60) {
+          this.finalResult = this.finalResult % 60;
+        }
+      }
+
+      if (this.finalResult === this.currentMinutesResult) {
+        this.isQuizOver = true;
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("Error while Displaying quizExpirationTime:", error);
+      throw error;
+    }
+  }
+
+  /**
+   *Start a Cron Job For a Expiration Time.
+   *
+   * @param {number} id - Id of the questions.
+   * @param {string} answer - Answer Of the Question supplied by the user.
+   * @param {string} expirationTime - ExpirationTime of the given Questions.
+   * @returns {Promise<void>} Resolves after starting a cron job or rejecting on error.
+   * @memberof QuizController
+   */
+  async startCronJob(
+    id: number,
+    answer: string,
+    quizId: number,
+    expirationTime: string
+  ): Promise<void> {
+    try {
+      const expirationMinutes = parseInt(expirationTime);
+      const cronExpression = `*/${expirationMinutes} * * * *`;
+
+      this.cronJob = new CronJob(cronExpression, async () => {
+        try {
+          console.log('Cron Job Is already Running (inside from - Try catch block)');
+          await this.checkAnswers(id, answer, quizId);
+        } catch (error) {
+          console.error("Error in cron job callback:", error);
+        }
+      });
+
+      if (!this.cronJob.running) {
+        this.cronJob.start();
+        console.log('2. First Time Make the Cron Job Run for a given Questions');
+        await this.checkAnswers(id, answer, quizId);
+      }
+    } catch (error) {
+      console.error("Error starting cron job:", error);
+      throw error;
+    }
+  }
+
+  /**
+   *Displays the Score Of the Quiz
+   *
+   * @returns {Promise<void>} Resolves after Displays the Score Of the Quiz or rejecting on error.
+   * @memberof QuizController
+   */
+  async scoretOfQuiz(): Promise<void> {
+    try {
+      this.io.emit("score", this.score);
+    } catch (error) {
+      throw error;
+    }
+  }
+}
+
+
+=====================================================================================
+======================================================================================
+
+
+
+
+//Works
+==================================================
+
+import { Server } from "socket.io";
+import { CronJob } from "cron";
+import Question from "../db/models/quesTionModel";
+import QuizExpiration from "../db/models/quizExpireModel";
+import { sequelize } from "../db/db";
+
+export class QuizController {
+  io: Server;
+  score: number = 0;
+  cronJob: CronJob;
+  currentMinutesResult: number;
+  finalResult: number;
+  tmp: number;
+  isQuestionChecked: boolean;
+
+  /**
+   * Creates a new QuizController instance.
+   * @param {Server} io - The Socket.IO server instance.
+   */
+  constructor(io: Server) {
+    this.io = io;
+    this.tmp = 0;
+  }
+
+  /**
+   * Asynchronously retrieves questions from the database and emits them to all connected clients.
+   *
+   * @async
+   * @returns {Promise<void>} Resolves after emitting questions or rejecting on error.
+   * @throws {Error} If no questions are found in the database.
+   * @memberof QuizController
+   */
+  async sendQuestions(): Promise<void> {
+    try {
+      const questions = await Question.findAll({
+        order: sequelize.literal("rand()"),
+        limit: 1,
+        attributes: ["id", "question"],
+      });
+
+      if (!questions) {
+        this.io.emit("questions_controller", "Question not found.");
+        return;
+      }
+
+      this.io.emit("questions_controller", questions);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Check the Answer of the questions.
+   *
+   * @async
+   * @param {number} id - Id of the questions.
+   * @param {string} answer - Answer Of the Question supplied by the user.
+   * @returns {Promise<void>} Resolves after emitting questions or rejecting on error.
+   * @throws {Error} If no questions are found in the database.
+   * @memberof QuizController
+   */
+  async checkAnswers(
+    id: number,
+    answer: string,
+    quizId: number
+  ): Promise<void> {
+    try {
+      //Check if quiz is expires or not.
+      const isQuizExpired = await this.quizExpirationTime(quizId);
+
+      if (isQuizExpired) {
+        this.io.emit("quiz_time_over", "Quiz Time is Over.");
+        
+        if (this.cronJob.running) {
+          this.cronJob.stop();
+          console.log('Quiz Time IS over.');
+          
+          return;
+        }
+      }
+
+      const result = await Question.findOne({ where: { id } });
+
+      if (!result) {
+        this.io.emit("questions_controller", "Question not found.");
+        return;
+      }
+
+      if (!this.cronJob || !this.cronJob.running) {
+        this.io.emit("question_time_over", "Time is Over For this Question.");
+        return;
+      }
+
+      const quizExpireTimeAsNumber = parseInt(result.expirationTime);
+
+
+      if (!this.tmp) {
+        this.tmp = quizExpireTimeAsNumber + this.currentMinutesResult;
+      }
+
+      const currentMinutes = new Date().getMinutes();
+      this.currentMinutesResult = currentMinutes;
+
+      if (this.tmp > 60) {
+        this.tmp = this.tmp % 60;
+      }
+      console.log('- this is the expire time for the current questions',quizExpireTimeAsNumber);
+      console.log('- This is the Total time',this.tmp);
+      console.log('- This is the Remaining time',this.currentMinutesResult);
+
+      if (this.tmp === this.currentMinutesResult) {
+        this.io.emit( 
+          "questions_controller",
+          "Submission Time For this question is over."
+        );
+        if (this.cronJob.running) {
+          this.isQuestionChecked = true;
+          this.cronJob.stop();
+          this.tmp = 0;
+          console.log('3. NOw cron Job is Stopped For the Current Question.');
+          return;
+        }
+      }
+
+      if (result.ans === answer) {
+        this.score += 1;
+        this.cronJob.stop();
+        this.io.emit("questions_controller", "Your answer is correct!");
+      } else {
+        this.io.emit("questions_controller", "Your answer is wrong.");
+      }
+    } catch (error) {
+      console.error(" Something went wrong while checking answers:", error);
+      throw error;
+    }
+  }
+
+  /**
+   *Check the Answer of the question based on question Id.
+   *
+   * @param {number} id - Id of the questions.
+   * @param {string} answer - Answer Of the Question supplied by the user.
+   * @returns {Promise<void>} Resolves after emitting the send questions by ID or rejecting on error.
+   * @memberof QuizController
+   */
+  async sendAnsById(data: { id: number; answer: string }): Promise<void> {
+    try {
+      const { id, answer } = data;
+
+      const result = await Question.findOne({ where: { id } });
+
+      if (!result) {
+        this.io.emit("questions_controller", "Question not found.");
+        return;
+      }
+
+      const quizId = result.quizId;
+      const expirationTime = result.expirationTime;
+
+      if (!this.cronJob || !this.cronJob.running) {
+        console.log('1. Cron Job is not running - From Send ANS ID');
+        await this.startCronJob(id, answer, quizId, expirationTime);
+      } else {
+        console.log('Cron Job is running - From Send ANS ID and now checking the answer.');
+        await this.checkAnswers(id, answer, quizId);
+      }
+    } catch (error) {
+      console.error("Error while sending questions:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Calcuting the Quiz Expirations Time.
+   *
+   * @param {number} id
+   * @returns {Promise<void>} Resolves after emitting quizExpirationTime or rejecting on error.
+   * @memberof QuizController
+   */
+  async quizExpirationTime(id: number): Promise<Boolean> {
+    try {
+      //Check if quiz is expires or not.
+      const result = await QuizExpiration.findOne({
+        where: {
+          quizId: id,
+        },
+      });
+      console.log("this is quizExpirationTime of quiz", result.quizExpirationTime);
+
+      const currentMinutes = new Date().getMinutes();
+      this.currentMinutesResult = currentMinutes;
+
+      if (!this.finalResult) {
+        this.finalResult =
+          parseInt(result.quizExpirationTime) + this.currentMinutesResult;
+
+        if (this.finalResult > 60) {
+          this.finalResult = this.finalResult % 60;
+        }
+      }
+
+      if (this.finalResult === this.currentMinutesResult) {
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("Error while Displaying quizExpirationTime:", error);
+      throw error;
+    }
+  }
+
+  /**
+   *Start a Cron Job For a Expiration Time.
+   *
+   * @param {number} id - Id of the questions.
+   * @param {string} answer - Answer Of the Question supplied by the user.
+   * @param {string} expirationTime - ExpirationTime of the given Questions.
+   * @returns {Promise<void>} Resolves after starting a cron job or rejecting on error.
+   * @memberof QuizController
+   */
+  async startCronJob(
+    id: number,
+    answer: string,
+    quizId: number,
+    expirationTime: string
+  ): Promise<void> {
+    try {
+      const expirationMinutes = parseInt(expirationTime);
+      const cronExpression = `*/${expirationMinutes} * * * *`;
+
+      this.cronJob = new CronJob(cronExpression, async () => {
+        try {
+          console.log('Cron Job Is already Running (inside from - Try catch block)');
+          await this.checkAnswers(id, answer, quizId);
+        } catch (error) {
+          console.error("Error in cron job callback:", error);
+        }
+      });
+
+      if (!this.cronJob.running) {
+        this.cronJob.start();
+        console.log('2. First Time Make the Cron Job Run for a given Questions');
+        await this.checkAnswers(id, answer, quizId);
+      }
+    } catch (error) {
+      console.error("Error starting cron job:", error);
+      throw error;
+    }
+  }
+
+  /**
+   *Displays the Score Of the Quiz
+   *
+   * @returns {Promise<void>} Resolves after Displays the Score Of the Quiz or rejecting on error.
+   * @memberof QuizController
+   */
+  async scoretOfQuiz(): Promise<void> {
+    try {
+      this.io.emit("score", this.score);
+    } catch (error) {
+      throw error;
+    }
+  }
+}

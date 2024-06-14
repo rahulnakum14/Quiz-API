@@ -1,0 +1,93 @@
+import { Model, DataTypes } from "sequelize";
+import {sequelize} from "../db";
+import quizAttributes from "../../types/quizType";
+
+/**
+ * Blog model class representing a Quiz in the database.
+ */
+class Quiz extends Model<quizAttributes> {
+  public id!: number;
+  public question!: string;
+  public ans!: string;
+  expirationTime: any;
+}
+
+/**
+ * Initialize the Quiz model with attributes and options.
+ */
+Quiz.init(
+  {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true,
+    },
+    question: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true,
+    },
+    ans: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    expirationTime:{
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    quizId:{
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    }
+  },
+  {
+    tableName:'quizs',
+    sequelize,
+    modelName:"quiz",
+    timestamps: false, 
+  }
+);
+
+export default Quiz;
+
+
+
+
+
+=========================================================================
+
+
+
+
+module.exports = {
+  async up(queryInterface, Sequelize) {
+    await queryInterface.createTable('quizs', {
+      id: {
+        type: Sequelize.INTEGER,
+        primaryKey: true,
+        autoIncrement: true,
+      },
+      question: {
+        type: Sequelize.STRING,
+        allowNull: false,
+        unique: true,
+      },
+      ans: {
+        type: Sequelize.STRING,
+        allowNull: false,
+      },
+      expirationTime: {
+        type: Sequelize.STRING,
+        allowNull: false,
+      },
+      quizId:{
+        type: Sequelize.INTEGER,
+        allowNull:false
+      }
+    });
+  },
+
+  async down(queryInterface, Sequelize) {
+    await queryInterface.dropTable('quizs');
+  }
+};
