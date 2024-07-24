@@ -1,0 +1,171 @@
+import requests
+import openai
+import re
+
+# GitHub and OpenAI API keys
+GITHUB_TOKEN = 'your_github_token'
+OPENAI_API_KEY = 'your_openai_api_key'
+REPO_OWNER = 'your_github_username'
+REPO_NAME = 'your_repository_name'
+
+# Function to fetch file content from GitHub
+def fetch_github_files():
+    url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents'
+    headers = {
+        'Authorization': f'token {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.json()
+
+# Function to identify API endpoints in the file
+def identify_api_endpoints(file_content):
+    # Simple regex to identify common API endpoint patterns (customize as needed)
+    pattern = re.compile(r'@(GET|POST|PUT|DELETE)\s*\(\s*["\'](.*?)["\']\s*\)')
+    return pattern.findall(file_content)
+
+# Function to generate detailed README using GPT-4
+def generate_readme_with_gpt4(overview, setup, api_endpoints):
+    openai.api_key = OPENAI_API_KEY
+    endpoints_str = "\n".join([f"**{method}** {endpoint}" for method, endpoint in api_endpoints])
+    prompt = (
+        f"# Project Overview\n"
+        f"{overview}\n\n"
+        f"# Setup Instructions\n"
+        f"{setup}\n\n"
+        f"# API Endpoints\n"
+        f"{endpoints_str}\n\n"
+        f"# How to Run\n"
+        f"1. Clone the repository.\n"
+        f"2. Install dependencies.\n"
+        f"3. Start the server.\n"
+        f"4. Access the API at the provided endpoints.\n"
+    )
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "You are a documentation assistant."},
+            {"role": "user", "content": prompt}
+        ]
+    )
+    return response['choices'][0]['message']['content']
+
+# Fetch files from the GitHub repository
+files = fetch_github_files()
+
+# Filter Python or JavaScript files (assuming these contain API endpoints)
+api_files = [file for file in files if file['name'].endswith(('.py', '.js'))]
+
+# Identify API endpoints in each file
+api_endpoints = []
+for file in api_files:
+    file_url = file['download_url']
+    file_content = requests.get(file_url).text
+    api_endpoints.extend(identify_api_endpoints(file_content))
+
+# Define a sample project overview and setup instructions
+project_overview = (
+    "This project is a web application that provides various API endpoints for managing resources."
+)
+setup_instructions = (
+    "1. Ensure you have Node.js and npm installed.\n"
+    "2. Clone the repository using `git clone <repository_url>`.\n"
+    "3. Navigate to the project directory.\n"
+    "4. Install dependencies using `npm install`.\n"
+    "5. Start the server using `npm start`."
+)
+
+# Generate README content using GPT-4
+if api_endpoints:
+    readme_content = generate_readme_with_gpt4(project_overview, setup_instructions, api_endpoints)
+    print("Generated README:\n", readme_content)
+else:
+    print("No API endpoints found.")
+
+
+---------------------------------------- Old Code ----------------------------------------------------
+             import requests
+import openai
+import re
+
+# GitHub and OpenAI API keys
+GITHUB_TOKEN = 'your_github_token'
+OPENAI_API_KEY = 'your_openai_api_key'
+REPO_OWNER = 'your_github_username'
+REPO_NAME = 'your_repository_name'
+
+# Function to fetch file content from GitHub
+def fetch_github_files():
+    url = f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents'
+    headers = {
+        'Authorization': f'token {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github.v3+json'
+    }
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.json()
+
+# Function to identify API endpoints in the file
+def identify_api_endpoints(file_content):
+    # Simple regex to identify common API endpoint patterns (customize as needed)
+    pattern = re.compile(r'@(GET|POST|PUT|DELETE)\s*\(\s*["\'](.*?)["\']\s*\)')
+    return pattern.findall(file_content)
+
+# Function to generate detailed README using GPT-4
+def generate_readme_with_gpt4(overview, setup, api_endpoints):
+    openai.api_key = OPENAI_API_KEY
+    endpoints_str = "\n".join([f"**{method}** {endpoint}" for method, endpoint in api_endpoints])
+    prompt = (
+        f"# Project Overview\n"
+        f"{overview}\n\n"
+        f"# Setup Instructions\n"
+        f"{setup}\n\n"
+        f"# API Endpoints\n"
+        f"{endpoints_str}\n\n"
+        f"# How to Run\n"
+        f"1. Clone the repository.\n"
+        f"2. Install dependencies.\n"
+        f"3. Start the server.\n"
+        f"4. Access the API at the provided endpoints.\n"
+    )
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "You are a documentation assistant."},
+            {"role": "user", "content": prompt}
+        ]
+    )
+    return response['choices'][0]['message']['content']
+
+# Fetch files from the GitHub repository
+files = fetch_github_files()
+
+# Filter Python or JavaScript files (assuming these contain API endpoints)
+api_files = [file for file in files if file['name'].endswith(('.py', '.js'))]
+
+# Identify API endpoints in each file
+api_endpoints = []
+for file in api_files:
+    file_url = file['download_url']
+    file_content = requests.get(file_url).text
+    api_endpoints.extend(identify_api_endpoints(file_content))
+
+# Define a sample project overview and setup instructions
+project_overview = (
+    "This project is a web application that provides various API endpoints for managing resources."
+)
+setup_instructions = (
+    "1. Ensure you have Node.js and npm installed.\n"
+    "2. Clone the repository using `git clone <repository_url>`.\n"
+    "3. Navigate to the project directory.\n"
+    "4. Install dependencies using `npm install`.\n"
+    "5. Start the server using `npm start`."
+)
+
+# Generate README content using GPT-4
+if api_endpoints:
+    readme_content = generate_readme_with_gpt4(project_overview, setup_instructions, api_endpoints)
+    print("Generated README:\n", readme_content)
+else:
+    print("No API endpoints found.")
